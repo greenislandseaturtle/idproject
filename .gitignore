@@ -1,0 +1,25 @@
+# 憑證 / 敏感檔 — 絕不進 git
+*-service-account*.json
+*service_account*.json
+client_secret*.json
+.env
+.env.*
+config.local.js
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 模型權重與快取
+*.pt
+*.pth
+*.bin
+*.safetensors
+index/
+.cache/
+
+# 系統
+.DS_Store
+Thumbs.db
+.claude/
