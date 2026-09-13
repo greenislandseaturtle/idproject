@@ -207,10 +207,11 @@
    */
   function renderHeader(opts) {
     const a = Auth.current();
-    const isResearcherPage = !!opts.researcher;
-    const tabs = isResearcherPage
+    // 研究員登入後，所有頁面都用研究員版頁首（徽章 + 固定分頁順序），避免切頁時標籤跳動
+    const isResearcherPage = !!opts.researcher || !!(a && a.researcher);
+    const tabs = (a && a.researcher)
       ? [['admin.html', '儀表板'], ['database.html', '綠島海龜模型資料庫'], ['upload.html', '上傳照片比對'], ['index.html', '個體總覽']]
-      : [['index.html', '個體總覽'], ['upload.html', '上傳照片比對']].concat(a ? [['records.html', '我的紀錄']] : []).concat(a && a.researcher ? [['admin.html', '儀表板']] : []);
+      : [['index.html', '個體總覽'], ['upload.html', '上傳照片比對']].concat(a ? [['records.html', '我的紀錄']] : []);
     const nav = tabs.map(function (t) { return '<a href="' + t[0] + '" class="' + (t[1] === opts.active ? 'active' : '') + '">' + esc(t[1]) + '</a>'; }).join('');
     const userHtml = a
       ? '<div class="user-chip" id="userChip" title="登出"><div class="avatar ' + (a.researcher ? 'researcher' : '') + '">' + esc((a.researcher ? '研' : (a.name || '?').charAt(0))) + '</div><div class="name">' + esc((a.researcher ? '研究員・' : '') + a.name) + '</div></div>'
