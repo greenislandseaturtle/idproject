@@ -307,10 +307,11 @@ function crCompare_(blob, side, species) {
     method: 'post', payload: { file: blob, side: side, species: speciesKey_(species) }
   }).results || [];
 }
-function crHealth_() {
+/** 健康檢查；warm=1 讓 Cloud Run 在背景先載入模型（前端開上傳頁時呼叫）。 */
+function crHealth_(warm) {
   try {
     const base = cloudRunBase_();
-    const resp = UrlFetchApp.fetch(base + '/health', {
+    const resp = UrlFetchApp.fetch(base + '/health' + (warm ? '?warm=1' : ''), {
       method: 'get', headers: { 'Authorization': 'Bearer ' + getIdToken_(base) }, muteHttpExceptions: true
     });
     return { code: resp.getResponseCode(), body: resp.getContentText() };
@@ -465,7 +466,12 @@ function handlePublic_(action, body) {
       case 'public_config': return ok_(publicConfig_());
       case 'public_overview': return ok_(getOverview_());
       case 'public_individual': return ok_(getIndividualPublic_(body.individualId));
-      case 'public_warmup': { const h = crHealth_(); return ok_({ up: h.code === 200 }); }
+      case 'public_warmup': {
+        const h = crHealth_(true);
+        let info = {};
+        try { info = JSON.parse(h.body); } catch (e) { }
+        return ok_({ up: h.code === 200, modelLoaded: !!info.model_loaded });
+      }
       case 'public_compare': return anonCompare_(body);
       default: return fail_('unknown_action');
     }

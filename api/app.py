@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import secrets
+import threading
 import time
 from io import BytesIO
 
@@ -21,6 +22,7 @@ from fastapi.responses import JSONResponse
 from PIL import Image, UnidentifiedImageError
 from pydantic import BaseModel, Field
 
+from detector import TurtleDetector
 from drive import DriveClient
 from index_manager import IndexManager
 from model import FeatureExtractor
@@ -146,11 +148,35 @@ def _validate_file_id(file_id: str) -> str:
     return s
 
 
-@app.get("/health")
-async def health() -> dict:
+_warm_lock = threading.Lock()
+_warming = False
+
+
+def _warm_models() -> None:
+    """背景載入模型與索引，讓前端開頁時的 warmup 真正把 cold start 吃掉。"""
+    global _warming
     try:
+        get_extractor()
+        TurtleDetector.get()
+        _ = get_manager().index
+    except Exception:
+        logger.exception("warm-up failed")
+    finally:
+        _warming = False
+
+
+@app.get("/health")
+async def health(warm: int = 0) -> dict:
+    """健康檢查；warm=1 時若模型尚未載入，於背景執行緒預先載入（不阻塞回應）。"""
+    global _warming
+    try:
+        if warm and _extractor is None:
+            with _warm_lock:
+                if not _warming:
+                    _warming = True
+                    threading.Thread(target=_warm_models, daemon=True).start()
         stats = _manager.stats() if _manager is not None else {}
-        return {"status": "ok", "model_loaded": _extractor is not None, "stats": stats}
+        return {"status": "ok", "model_loaded": _extractor is not None, "warming": _warming, "stats": stats}
     except Exception:
         logger.exception("health check failed")
         return {"status": "degraded"}
