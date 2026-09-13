@@ -165,16 +165,18 @@ def _warm_models() -> None:
         _warming = False
 
 
+@app.on_event("startup")
+def _load_on_startup() -> None:
+    """容器啟動時就把模型載進記憶體。
+    Cloud Run 只在「處理請求」與「啟動」期間配 CPU，背景執行緒載入會被節流到極慢，
+    所以改在啟動階段（有 --cpu-boost）同步載入；前端 warmup 只要能讓容器啟動即可。"""
+    _warm_models()
+
+
 @app.get("/health")
 async def health(warm: int = 0) -> dict:
-    """健康檢查；warm=1 時若模型尚未載入，於背景執行緒預先載入（不阻塞回應）。"""
-    global _warming
+    """健康檢查；模型已於啟動時載入，warm 參數保留相容。"""
     try:
-        if warm and _extractor is None:
-            with _warm_lock:
-                if not _warming:
-                    _warming = True
-                    threading.Thread(target=_warm_models, daemon=True).start()
         stats = _manager.stats() if _manager is not None else {}
         return {"status": "ok", "model_loaded": _extractor is not None, "warming": _warming, "stats": stats}
     except Exception:
