@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>我的紀錄｜海龜個體辨識系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="css/ocean.css">
+</head>
+<body>
+  <main class="content">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div style="font-size:24px;font-weight:900;color:var(--navy)">我的紀錄</div>
+      <div style="display:flex;gap:18px;font-size:13px;color:var(--muted)"><span>回報照片數 <b class="num" id="photoCount" style="color:var(--navy);font-size:16px">-</b></span><span>個體數 <b class="num" id="indCount" style="color:var(--navy);font-size:16px">-</b></span></div>
+    </div>
+    <div id="list" style="display:flex;flex-direction:column;gap:20px"></div>
+    <div id="status" class="empty">載入中…</div>
+  </main>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/records.js"></script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>上傳照片比對｜海龜個體辨識系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="css/ocean.css">
+</head>
+<body>
+  <main class="content" id="main">
+    <!-- 步驟 1：表單 -->
+    <section id="stepForm" class="content-narrow" style="margin:0 auto;display:flex;flex-direction:column;gap:16px;width:640px;max-width:100%">
+      <div class="note-box" id="anonNote">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D9951F" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 8 V 13"></path><path d="M12 16.5 V 16.6"></path></svg>
+        <span>未登入之比對，結果將不儲存。<a href="#" id="noteLogin">登入</a>後可保留回報紀錄。</span>
+      </div>
+      <div class="paper" style="padding:28px 32px;display:flex;flex-direction:column;gap:22px">
+        <div class="field"><div class="label">目擊日期 <span class="req">*</span></div><input type="date" class="input" id="sightingDate"></div>
+        <div class="field"><div class="label">目擊地點 <span class="req">*</span></div><div id="locationSel"></div></div>
+        <div class="field"><div class="label">物種 <span class="req">*</span> <span class="hint">(不同物種請分批回報)</span></div><div id="speciesSel"></div></div>
+        <div class="field" id="publicField" style="display:none">
+          <label class="checkbox-row"><input type="checkbox" id="isPublic"><span>目擊資訊公開<span style="color:var(--muted);font-size:12px;display:block">經研究員審查確認後，將會顯示在個體總覽的詳細資料中</span></span></label>
+        </div>
+        <div class="field">
+          <div class="label">上傳照片 <span class="req">*</span></div>
+          <div class="dropzone" id="dropzone">
+            <svg width="576" height="40" viewBox="0 0 576 40" preserveAspectRatio="none" style="position:absolute;left:0;bottom:0;width:100%" fill="none"><path d="M0 22 C80 8 160 34 260 20 C360 6 440 32 576 16 V40 H0 Z" fill="#CBE2F7" opacity="0.7"></path></svg>
+            <div class="cut" style="width:56px;height:56px;background:#2B5CA8;display:flex;align-items:center;justify-content:center;position:relative"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16 V 5"></path><path d="M7 9 L12 4 L17 9"></path><path d="M4 16 V 19 H 20 V 16"></path></svg></div>
+            <div style="position:relative;font-size:14px;font-weight:700;color:var(--navy)">點擊或拖曳照片到這裡</div>
+            <div style="position:relative;font-size:12px;color:var(--muted)">JPG / PNG / HEIC，每張 10MB 以內，最多 <span id="maxPhotos">12</span> 張；請拍清楚海龜頭部側面</div>
+            <input type="file" id="fileInput" accept="image/jpeg,image/png,image/heic,image/heif" multiple style="display:none">
+          </div>
+        </div>
+        <div id="turnstileBox"></div>
+        <button class="btn btn-coral btn-lg btn-block" id="toGrouping" disabled>下一步：標示側別與分組</button>
+      </div>
+    </section>
+
+    <!-- 步驟 2：側別與分組 -->
+    <section id="stepGroup" class="hidden" style="display:flex;gap:24px;align-items:flex-start">
+      <div class="paper" style="flex:1;padding:20px 22px;display:flex;flex-direction:column;gap:14px;min-width:0">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:16px;font-weight:700;color:var(--navy)">已上傳照片（<span class="num" id="photoCount">0</span>）</div>
+          <button class="btn btn-ghost btn-sm" id="addMore"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2B5CA8" stroke-width="2.5" stroke-linecap="round"><path d="M12 5 V 19"></path><path d="M5 12 H 19"></path></svg>再加照片</button>
+        </div>
+        <div class="photo-grid" id="photoGrid"></div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">每張照片請標示左／右側。若多張是同一隻海龜：先點右側「個體」框的「＋」進入選擇模式，再點選照片加入。未分組的照片各自視為獨立個體。</div>
+      </div>
+      <div style="width:320px;flex-shrink:0;display:flex;flex-direction:column;gap:14px" id="groupPanel">
+        <div style="font-size:16px;font-weight:700;color:var(--navy)">個體分組</div>
+        <div id="groupList" style="display:flex;flex-direction:column;gap:14px"></div>
+        <div class="dashed-btn" id="addGroup"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B7395" stroke-width="2.5" stroke-linecap="round"><path d="M12 5 V 19"></path><path d="M5 12 H 19"></path></svg>新增個體分組</div>
+        <button class="btn btn-coral btn-lg btn-block" id="startCompare">開始比對</button>
+        <div style="font-size:12px;color:var(--muted);text-align:center">將依個體分組、左右側各自比對</div>
+        <button class="btn btn-ghost btn-sm" id="backToForm">返回修改日期／地點／物種</button>
+      </div>
+    </section>
+
+    <!-- 步驟 3：比對中 / 結果 -->
+    <section id="stepResult" class="hidden" style="display:flex;flex-direction:column;gap:24px"></section>
+  </main>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/upload.js"></script>
+</body>
+</html>

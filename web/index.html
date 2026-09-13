@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>綠島海龜個體總覽｜海龜個體辨識系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="css/ocean.css">
+</head>
+<body>
+  <main class="content">
+    <div class="paper filter-bar" id="filterBar">
+      <div class="filter-group"><div class="filter-label">物種</div><div class="chips" id="fSpecies"></div></div>
+      <div class="divider-v"></div>
+      <div class="filter-group"><div class="filter-label">經常出沒點</div><div class="chips" id="fLocation"></div></div>
+      <div class="divider-v"></div>
+      <div class="filter-group"><div class="filter-label">目擊次數</div><div class="chips" id="fCount"></div></div>
+    </div>
+    <div id="cards" class="grid-cards"></div>
+    <div id="status" class="empty">載入中…</div>
+  </main>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/overview.js"></script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>研究員儀表板｜海龜個體辨識系統</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+  <link rel="stylesheet" href="css/ocean.css">
+</head>
+<body>
+  <main class="content">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div style="font-size:24px;font-weight:900;color:var(--navy)">儀表板</div>
+      <a class="btn btn-ghost btn-sm" id="sheetLink" target="_blank" rel="noopener" style="min-height:42px">前往資料庫（Google Sheet）<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2B5CA8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6 H 18 V 16"></path><path d="M18 6 L 7 17"></path></svg></a>
+    </div>
+    <div class="stat-grid" id="stats">
+      <div class="paper stat"><div class="k">使用者數量</div><div class="v num" id="sUsers">-</div><div class="d">曾登入回報的 Google 帳號數</div></div>
+      <div class="paper stat"><div class="k">海龜個體數</div><div class="v num" id="sInd">-</div><div class="d">已建檔個體</div></div>
+      <div class="paper stat"><div class="k">資料庫照片數</div><div class="v num" id="sPhotos">-</div><div class="d">民眾 <span class="num" id="sPhotosP">-</span>／調查 <span class="num" id="sPhotosS">-</span></div></div>
+      <div class="paper stat paper-orange"><div class="k" style="color:var(--orange-t)">需審查筆數 <span class="tag" style="background:var(--orange);color:#FFF">待處理</span></div><div class="v num" id="sPending" style="color:var(--orange)">-</div><div class="d">民眾 <span class="num" id="sPendingP">-</span>／調查 <span class="num" id="sPendingS">-</span></div></div>
+      <div class="paper stat"><div class="k">比對資料上次更新</div><div class="v num" id="sIndexDate" style="font-size:26px;line-height:1.5">-</div><div class="d" id="sIndexInfo">-</div></div>
+      <div style="background:var(--navy);padding:20px 24px;display:flex;flex-direction:column;justify-content:center;gap:10px;box-shadow:0 6px 0 var(--blue4),0 14px 24px rgba(29,63,122,.2);position:relative;overflow:hidden">
+        <svg viewBox="0 0 360 120" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%" fill="none"><path d="M0 92 C60 78 120 104 200 88 C270 74 320 96 360 84 V120 H0 Z" fill="#2B5CA8" opacity="0.7"></path><circle cx="300" cy="26" r="6" stroke="#6AA1DE" stroke-width="2" opacity="0.6"></circle></svg>
+        <button class="btn btn-orange btn-block" id="syncBtn" style="position:relative;font-size:15px">更新比對資料</button>
+        <div style="font-size:11px;color:var(--blue4);text-align:center;position:relative" id="syncInfo">依「納入比對索引」勾選結果重建索引</div>
+      </div>
+    </div>
+    <div class="paper" style="padding:20px 24px 22px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="font-size:16px;font-weight:700;color:var(--navy)">待審查（全部 <span class="num" id="pendingTotal">0</span> 筆）</div>
+        <div class="chips" id="srcFilter"></div>
+      </div>
+      <div class="row-list" id="pendingList"></div>
+      <div id="pendingEmpty" class="empty hidden">目前沒有待審查的紀錄</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.7">・重新比對：「更新比對資料」後可對單筆重跑比對，以最新索引重新找出前三候選。<br>・民眾回報：民眾選「是它！」後狀態仍為審查，研究員審查確認後才變更為完成並入庫。<br>・水下調查：調查員在比對結果選定個體即直接完成並入庫；本清單僅列出「比對結果已出、尚未選擇」的調查照片。</div>
+    </div>
+  </main>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

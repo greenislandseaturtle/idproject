@@ -1,0 +1,14 @@
+fastapi==0.115.0
+uvicorn==0.30.0
+torch==2.3.0
+torchvision==0.18.0
+timm==1.0.3
+Pillow==10.4.0
+numpy==1.26.4
+google-cloud-storage==2.18.0
+google-api-python-client==2.149.0
+google-auth==2.35.0
+python-multipart==0.0.9
+pillow-heif==0.18.0
+pydantic>=2,<3
+ultralytics>=8.3.0,<9
