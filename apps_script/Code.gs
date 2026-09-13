@@ -323,6 +323,38 @@ function crIndexApply_(payload) {
   });
 }
 
+// ====================== 診斷（在編輯器手動執行，看執行紀錄） ======================
+function diagCloudRun() {
+  const out = {
+    cloudRunUrl: CONFIG.CLOUD_RUN_URL || '(空白！請用最新版 Code.gs)',
+    hasApiKey: !!getProp_('CLOUD_RUN_API_KEY'),
+    hasAdminToken: !!getProp_('CLOUD_RUN_ADMIN_TOKEN'),
+    hasClientId: !!getProp_('GOOGLE_CLIENT_ID'),
+    owner: currentOwnerEmail_()
+  };
+  try {
+    const base = cloudRunBase_();
+    const resp = UrlFetchApp.fetch(
+      'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/' + SERVICE_ACCOUNT_EMAIL + ':generateIdToken', {
+        method: 'post', contentType: 'application/json',
+        headers: { 'Authorization': 'Bearer ' + ScriptApp.getOAuthToken() },
+        payload: JSON.stringify({ audience: base, includeEmail: true }), muteHttpExceptions: true
+      });
+    out.generateIdToken = resp.getResponseCode() + ' ' + (resp.getResponseCode() === 200 ? 'OK' : resp.getContentText().substring(0, 300));
+    if (resp.getResponseCode() === 200) {
+      const h = crHealth_();
+      out.health = h.code + ' ' + String(h.body).substring(0, 200);
+      const m = cloudRunRequest_('/index/manifest', { method: 'get', headers: adminHeaders_() });
+      out.manifest = m.code + ' ' + String(m.body).substring(0, 100);
+    }
+  } catch (err) { out.error = String(err && err.message || err); }
+  console.log(JSON.stringify(out, null, 2));
+  return JSON.stringify(out, null, 2);
+}
+function currentOwnerEmail_() {
+  try { return Session.getEffectiveUser().getEmail() || ''; } catch (e) { return ''; }
+}
+
 // ====================== 初始化 ======================
 function initializeSheets() {
   const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
