@@ -23,5 +23,8 @@ ENV YOLO_CONFIG_DIR=/tmp/Ultralytics
 RUN python -c "from model import MODEL_NAME; import timm; timm.create_model(MODEL_NAME, num_classes=0, pretrained=True)"
 RUN python -c "from huggingface_hub import hf_hub_download; hf_hub_download(repo_id='BVRA/TurtleDetector', filename='turtle_detector.pt')"
 
+# 權重已在映像檔內：啟動時不再連 Hugging Face 檢查版本，省幾秒也避免外網故障拖垮啟動
+ENV HF_HUB_OFFLINE=1
+
 EXPOSE 8080
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
