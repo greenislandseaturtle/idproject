@@ -20,7 +20,7 @@
 const CONFIG = {
   SHEET_ID: '1zImpsCTjM8ky7CP2ZdzQJC3YapLh51nVefz1Q68Q7Yw',
   DRIVE_ROOT_ID: '1wOLoiKDGSn8siFsA_y5WrHLm9dg_a37y',
-  CLOUD_RUN_URL: '',  // 部署 Cloud Run 後填入，例如 https://turtle-api-xxxx.asia-east1.run.app
+  CLOUD_RUN_URL: 'https://turtle-api-841875653967.asia-east1.run.app',
   RESEARCHER_EMAILS: ['greenislandseaturtle@tourlearning089.com'],
   MAX_FILE_SIZE_MB: 10,
   ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/heic', 'image/heif'],
@@ -256,13 +256,29 @@ function invalidatePublicCache_() {
 
 // ====================== Cloud Run 客戶端（呼叫者身分） ======================
 /**
- * Cloud Run 以 --no-allow-unauthenticated 部署，需帶 Google 簽發的 token。
- * 組織政策禁止建立服務帳戶金鑰，故不走 v1 的「SA 金鑰簽 JWT 換 OIDC token」；
- * 改用指令碼擁有者（研究員帳號）的 OAuth access token（appsscript.json 需宣告 cloud-platform scope），
- * 並在 Cloud Run 授予該帳號 roles/run.invoker。Cloud Run 接受使用者帳號的 access token。
+ * Cloud Run 以 --no-allow-unauthenticated 部署，只接受 Google 簽發的 OIDC ID token。
+ * 組織政策禁止建立服務帳戶金鑰，故不走 v1 的「SA 金鑰簽 JWT」；改用 IAM Credentials API：
+ * 指令碼擁有者的 OAuth token（appsscript.json 宣告 cloud-platform scope）呼叫 generateIdToken，
+ * 以服務帳戶身分取得 ID token（擁有者需有該 SA 的 roles/iam.serviceAccountTokenCreator，
+ * SA 需有 Cloud Run 的 roles/run.invoker）。結果快取 50 分鐘（有效 1 小時）。
  */
+const SERVICE_ACCOUNT_EMAIL = 'turtle-api-sa@greenisland-idproject.iam.gserviceaccount.com';
 function getIdToken_(audience) {
-  return ScriptApp.getOAuthToken();
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'idtoken_' + sha256Hex_(audience).substring(0, 40);
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+  const resp = UrlFetchApp.fetch(
+    'https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/' + SERVICE_ACCOUNT_EMAIL + ':generateIdToken', {
+      method: 'post', contentType: 'application/json',
+      headers: { 'Authorization': 'Bearer ' + ScriptApp.getOAuthToken() },
+      payload: JSON.stringify({ audience: audience, includeEmail: true }),
+      muteHttpExceptions: true
+    });
+  if (resp.getResponseCode() !== 200) throw new Error('generateIdToken failed: ' + resp.getResponseCode() + ' ' + resp.getContentText().substring(0, 200));
+  const token = JSON.parse(resp.getContentText()).token;
+  cache.put(cacheKey, token, 50 * 60);
+  return token;
 }
 function cloudRunBase_() {
   if (!CONFIG.CLOUD_RUN_URL) throw new Error('CLOUD_RUN_URL not configured');
