@@ -4,7 +4,6 @@
  * 部署步驟：
  *   1) 建立與目標 Google Sheet 連結的容器型 Apps Script 專案，貼上本檔
  *   2) 「專案設定 → 指令碼屬性」設定（敏感值不寫在程式碼裡）：
- *        SERVICE_ACCOUNT_JSON   service account 金鑰 JSON 整份字串（Cloud Run OIDC 用）
  *        CLOUD_RUN_API_KEY      Cloud Run 的 X-API-Key
  *        CLOUD_RUN_ADMIN_TOKEN  Cloud Run 索引維護端點的 X-Admin-Token
  *        GOOGLE_CLIENT_ID       前端 Google 登入的 OAuth Client ID（驗 idToken audience）
@@ -255,31 +254,15 @@ function invalidatePublicCache_() {
   setProp_('PUBLIC_CACHE_VER', String(Date.now()));
 }
 
-// ====================== Cloud Run 客戶端（OIDC ID Token） ======================
+// ====================== Cloud Run 客戶端（呼叫者身分） ======================
+/**
+ * Cloud Run 以 --no-allow-unauthenticated 部署，需帶 Google 簽發的 token。
+ * 組織政策禁止建立服務帳戶金鑰，故不走 v1 的「SA 金鑰簽 JWT 換 OIDC token」；
+ * 改用指令碼擁有者（研究員帳號）的 OAuth access token（appsscript.json 需宣告 cloud-platform scope），
+ * 並在 Cloud Run 授予該帳號 roles/run.invoker。Cloud Run 接受使用者帳號的 access token。
+ */
 function getIdToken_(audience) {
-  const cache = CacheService.getScriptCache();
-  const cacheKey = 'idtoken_' + sha256Hex_(audience).substring(0, 40);
-  const cached = cache.get(cacheKey);
-  if (cached) return cached;
-  const sa = JSON.parse(getRequiredProp_('SERVICE_ACCOUNT_JSON'));
-  const now = Math.floor(Date.now() / 1000);
-  const b64u = function (s) { return Utilities.base64EncodeWebSafe(s).replace(/=+$/, ''); };
-  const header = b64u(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: sa.private_key_id }));
-  const claim = b64u(JSON.stringify({
-    iss: sa.client_email, sub: sa.client_email, aud: 'https://oauth2.googleapis.com/token',
-    iat: now, exp: now + 3600, target_audience: audience
-  }));
-  const sig = Utilities.computeRsaSha256Signature(header + '.' + claim, sa.private_key);
-  const assertion = header + '.' + claim + '.' + Utilities.base64EncodeWebSafe(sig).replace(/=+$/, '');
-  const resp = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
-    method: 'post', contentType: 'application/x-www-form-urlencoded',
-    payload: { grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: assertion },
-    muteHttpExceptions: true
-  });
-  if (resp.getResponseCode() !== 200) throw new Error('Token exchange failed: ' + resp.getResponseCode());
-  const idToken = JSON.parse(resp.getContentText()).id_token;
-  cache.put(cacheKey, idToken, 50 * 60);
-  return idToken;
+  return ScriptApp.getOAuthToken();
 }
 function cloudRunBase_() {
   if (!CONFIG.CLOUD_RUN_URL) throw new Error('CLOUD_RUN_URL not configured');
