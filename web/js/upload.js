@@ -44,7 +44,25 @@
     $('#toGrouping').disabled = photos.length === 0;
     $('#maxPhotos').textContent = maxPhotos();
     if (!$('#stepGroup').classList.contains('hidden')) renderPhotos();
-    else if (photos.length) toast('已加入 ' + photos.length + ' 張照片');
+    renderPreview();
+  }
+  /** 步驟 1：拖放區下方的縮圖預覽，讓使用者確認加入了哪些照片 */
+  function renderPreview() {
+    const box = $('#preList'); box.innerHTML = '';
+    box.classList.toggle('hidden', photos.length === 0);
+    photos.forEach(function (p, i) {
+      const item = el('<div class="pre-item"><div class="pimg">' + (p.url ? '<img src="' + esc(p.url) + '" alt="">' : T.placeholderSvg(p.file.name)) + '</div>' +
+        '<div class="fname num" title="' + esc(p.file.name) + '">' + esc(p.file.name) + '</div>' +
+        '<div class="remove" title="移除"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#5B7395" stroke-width="2.6" stroke-linecap="round"><path d="M6 6 L18 18"></path><path d="M18 6 L6 18"></path></svg></div></div>');
+      $('.remove', item).addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (p.url) URL.revokeObjectURL(p.url);
+        photos.splice(i, 1); pruneGroups();
+        $('#toGrouping').disabled = photos.length === 0;
+        renderPreview();
+      });
+      box.appendChild(item);
+    });
   }
 
   $('#toGrouping').addEventListener('click', function () {
@@ -60,7 +78,7 @@
     renderPhotos(); renderGroups();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
-  $('#backToForm').addEventListener('click', function () { $('#stepGroup').classList.add('hidden'); $('#stepForm').classList.remove('hidden'); });
+  $('#backToForm').addEventListener('click', function () { $('#stepGroup').classList.add('hidden'); $('#stepForm').classList.remove('hidden'); renderPreview(); });
 
   // ---------- 步驟 2 ----------
   function groupIndex(gid) { return groups.findIndex(function (g) { return g.id === gid; }); }

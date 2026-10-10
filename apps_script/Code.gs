@@ -531,6 +531,43 @@ function readRecords_() {
   const rows = data.map(function (r, i) { return recordFromRow_(r, i + 2); });
   return { sh: sh, rows: rows };
 }
+/** 以 FileID 欄判斷最後一筆資料：J/K 欄預先插入的勾選框會讓 getLastRow() 指到空白列之後。 */
+function lastRecordRow_(sh) {
+  const last = sh.getLastRow();
+  if (last < 2) return 1;
+  const ids = sh.getRange(2, COL.FILE_ID, last - 1, 1).getValues();
+  for (let i = ids.length - 1; i >= 0; i--) if (ids[i][0] !== '') return i + 2;
+  return 1;
+}
+function appendRecordRows_(sh, rowsData) {
+  const start = lastRecordRow_(sh) + 1;
+  const need = start + rowsData.length - 1 - sh.getMaxRows();
+  if (need > 0) sh.insertRowsAfter(sh.getMaxRows(), need);
+  sh.getRange(start, 1, rowsData.length, LAST_COL).setValues(rowsData);
+  sh.getRange(start, COL.SIGHT_DATE, rowsData.length, 1).setNumberFormat('@');
+  sh.getRange(start, COL.PUBLIC, rowsData.length, 2).insertCheckboxes();
+}
+/** 一次性維護：刪除「回報紀錄」中 FileID 為空的列（修正舊版把資料寫到第 1001 列之後的問題）。手動在編輯器執行。 */
+function removeBlankRecordRows() {
+  const sh = getSheet_(CONFIG.SHEETS.RECORDS);
+  const last = sh.getLastRow();
+  if (last < 2) return 'nothing';
+  const ids = sh.getRange(2, COL.FILE_ID, last - 1, 1).getValues();
+  let removed = 0;
+  let i = ids.length - 1;
+  while (i >= 0) {
+    if (ids[i][0] !== '') { i--; continue; }
+    let j = i;
+    while (j > 0 && ids[j - 1][0] === '') j--;
+    const count = i - j + 1;
+    // 保留至少一列資料列，避免刪光非凍結列
+    if (j === 0 && count === sh.getMaxRows() - 1) sh.deleteRows(3, count - 1);
+    else sh.deleteRows(j + 2, count);
+    removed += count;
+    i = j - 1;
+  }
+  return 'removed ' + removed;
+}
 function recordFromRow_(r, rowNum) {
   return {
     row: rowNum,
@@ -757,9 +794,7 @@ function uploadReport_(body, user) {
       rowsData.push(row);
     });
   });
-  const start = sh.getLastRow() + 1;
-  sh.getRange(start, 1, rowsData.length, LAST_COL).setValues(rowsData);
-  sh.getRange(start, COL.SIGHT_DATE, rowsData.length, 1).setNumberFormat('@');
+  appendRecordRows_(sh, rowsData);
   return ok_({ groupIds: groupIds, source: source, message: '已收到照片，比對進行中，可關閉瀏覽器' });
 }
 
@@ -1160,9 +1195,7 @@ function addPhotosToIndividual_(body, user) {
     row[COL.EMAIL - 1] = user.email; row[COL.PATH - 1] = CONFIG.FOLDERS.REPORTS;
     rowsData.push(row);
   });
-  const start = sh.getLastRow() + 1;
-  sh.getRange(start, 1, rowsData.length, LAST_COL).setValues(rowsData);
-  sh.getRange(start, COL.SIGHT_DATE, rowsData.length, 1).setNumberFormat('@');
+  appendRecordRows_(sh, rowsData);
   SpreadsheetApp.flush();
   const rows = readRecords_().rows.filter(function (r) { return r.groupId === groupId; });
   completeGroup_(sh, rows, id, body.includeIndex !== false, '', user.email);

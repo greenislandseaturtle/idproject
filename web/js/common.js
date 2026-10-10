@@ -63,7 +63,16 @@
     if (src) {
       const img = document.createElement('img');
       img.loading = 'lazy'; img.alt = '';
-      img.onerror = function () { img.remove(); };
+      // 剛上傳的照片 Drive 可能還沒產生縮圖，先保留佔位圖並延遲重試
+      const delays = /^https?:/.test(src) ? [3000, 8000, 20000] : [];
+      let attempt = 0;
+      img.style.visibility = 'hidden';
+      img.onload = function () { img.style.visibility = ''; };
+      img.onerror = function () {
+        if (attempt >= delays.length || !img.isConnected) { img.remove(); return; }
+        const wait = delays[attempt++];
+        setTimeout(function () { img.src = src + (src.indexOf('?') === -1 ? '?' : '&') + 'retry=' + attempt; }, wait);
+      };
       img.src = src;
       box.appendChild(img);
     }
@@ -203,14 +212,14 @@
   }
   /**
    * 頁首：opts = { active, title, sub(html), researcher(bool: 研究員版頁首) }
-   * 一般：個體總覽／上傳照片比對／我的紀錄(登入後)；研究員：儀表板／模型資料庫／上傳照片比對／個體總覽
+   * 一般：個體總覽／上傳照片比對／我的紀錄(登入後)；研究員：儀表板／模型資料庫／上傳照片比對／我的紀錄／個體總覽
    */
   function renderHeader(opts) {
     const a = Auth.current();
     // 研究員登入後，所有頁面都用研究員版頁首（徽章 + 固定分頁順序），避免切頁時標籤跳動
     const isResearcherPage = !!opts.researcher || !!(a && a.researcher);
     const tabs = (a && a.researcher)
-      ? [['admin.html', '儀表板'], ['database.html', '綠島海龜模型資料庫'], ['upload.html', '上傳照片比對'], ['index.html', '個體總覽']]
+      ? [['admin.html', '儀表板'], ['database.html', '綠島海龜模型資料庫'], ['upload.html', '上傳照片比對'], ['records.html', '我的紀錄'], ['index.html', '個體總覽']]
       : [['index.html', '個體總覽'], ['upload.html', '上傳照片比對']].concat(a ? [['records.html', '我的紀錄']] : []);
     const nav = tabs.map(function (t) { return '<a href="' + t[0] + '" class="' + (t[1] === opts.active ? 'active' : '') + '">' + esc(t[1]) + '</a>'; }).join('');
     const userHtml = a
