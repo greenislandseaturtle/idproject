@@ -38,7 +38,7 @@
     invalid_input: '資料未填完整或格式錯誤', invalid_photo_count: '照片數量不符', invalid_photo: '照片格式錯誤',
     unsupported_format: '不支援的照片格式', invalid_side: '每張照片都要標左／右側', file_too_large: '照片超過 10MB',
     invalid_group_count: '個體分組數量不符', invalid_group: '有個體分組沒有照片', captcha_failed: '人機驗證未通過，請重試',
-    compare_failed: '比對服務暫時無法使用，請稍後再試', not_found: '找不到紀錄', invalid_status: '目前狀態不允許此操作',
+    compare_failed: '比對服務暫時無法使用，請稍後再試', not_found: '找不到紀錄', busy: '系統忙碌中，請稍後再試', invalid_status: '目前狀態不允許此操作',
     invalid_individual: '編號格式錯誤（英數字、底線、連字號，2 到 30 字）', internal_error: '伺服器發生錯誤', network: '網路錯誤，請稍後再試'
   };
   function errMsg(code) { return ERRORS[code] || code || '未知錯誤'; }

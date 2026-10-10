@@ -504,6 +504,7 @@ function handleAdmin_(action, body, user) {
       case 'admin_individuals': return ok_(listIndividualsAdmin_());
       case 'admin_individual_photos': return ok_(getIndividualPhotosAdmin_(body.individualId));
       case 'admin_set_index': return setIndexFlag_(body, user);
+      case 'admin_delete_photo': return deletePhotoAdmin_(body, user);
       case 'admin_update_individual': return updateIndividual_(body, user);
       case 'admin_add_photos': return addPhotosToIndividual_(body, user);
       case 'admin_index_sync': return ok_(startIndexSync_(user));
@@ -1144,6 +1145,34 @@ function setIndexFlag_(body, user) {
   rec.sh.getRange(r.row, COL.INDEX).setValue(include);
   logAudit_(user.email, r.groupId, '納入比對索引', r.inIndex, include);
   return ok_({ fileId: fileId, inIndex: include });
+}
+/**
+ * 研究員刪除單張照片：Drive 移到垃圾桶（30 天內可還原）、已納入索引者立即移除、
+ * 整列內容備份到「異動紀錄」後刪除 Sheet 列。
+ */
+function deletePhotoAdmin_(body, user) {
+  const fileId = String(body.fileId || '').trim();
+  if (!fileId) return fail_('invalid_input');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return fail_('busy');
+  try {
+    const rec = readRecords_();
+    const r = rec.rows.filter(function (x) { return x.fileId === fileId; })[0];
+    if (!r) return fail_('not_found');
+    const backup = rec.sh.getRange(r.row, 1, 1, LAST_COL).getValues()[0].map(function (v) {
+      return v instanceof Date ? v.toISOString() : v;
+    });
+    try { DriveApp.getFileById(fileId).setTrashed(true); } catch (err) { logError_('trash ' + fileId, err); }
+    // 失敗不擋刪除：列刪掉後下次「更新比對資料」也會把它從索引移除
+    let indexRemoved = false;
+    if (r.inIndex) {
+      try { crIndexApply_({ removes: [fileId] }); indexRemoved = true; } catch (err) { logError_('index remove ' + fileId, err); }
+    }
+    logAudit_(user.email, r.groupId, '刪除照片', JSON.stringify(backup), '已刪除（Drive 垃圾桶）');
+    rec.sh.deleteRow(r.row);
+    invalidatePublicCache_();
+    return ok_({ deleted: fileId, indexRemoved: indexRemoved });
+  } finally { lock.releaseLock(); }
 }
 function updateIndividual_(body, user) {
   const id = normalizeIndividualId_(body.individualId);

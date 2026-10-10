@@ -56,13 +56,32 @@
 
   function tileMenu(p, tile) {
     const body = el('<div style="display:flex;flex-direction:column;gap:14px"><div class="ph" style="height:260px"></div><div style="font-size:13px;color:var(--muted)">日期 <span class="num">' + esc(fmtDate(p.date)) + '</span>・地點 ' + esc(p.location) + '・來源 ' + esc(p.source) + '・公開：' + (p.isPublic ? '是' : '否') + '・群組 <span class="num">' + esc(p.groupId) + '</span></div>' +
-      '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn ' + (p.inIndex ? 'btn-ghost' : 'btn-primary') + '" id="tog">' + (p.inIndex ? '取消納入比對索引' : '納入比對索引') + '</button><a class="btn btn-ghost" href="' + esc(p.url) + '" target="_blank" rel="noopener">在 Drive 開啟</a></div></div>');
+      '<div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn ' + (p.inIndex ? 'btn-ghost' : 'btn-primary') + '" id="tog">' + (p.inIndex ? '取消納入比對索引' : '納入比對索引') + '</button><a class="btn btn-ghost" href="' + esc(p.url) + '" target="_blank" rel="noopener">在 Drive 開啟</a><button class="btn btn-ghost" id="del" style="color:var(--coral);margin-left:auto">刪除照片</button></div></div>');
     $('.ph', body).replaceWith(imgBox(p.thumb, p.fileId, '', 'height:260px;cursor:zoom-in'));
     $('.ph', body).addEventListener('click', function () { lightbox(p.thumb); });
     const m = openModal('照片', body, { small: true });
     $('#tog', body).addEventListener('click', async function () {
       try { const r = await api('admin_set_index', { fileId: p.fileId, include: !p.inIndex }); p.inIndex = r.inIndex; toast(p.inIndex ? '已標記納入，下次更新比對資料時生效' : '已取消納入，下次更新時移除'); m.close(); openIndividual(current.id); loadList(); }
       catch (e) { toast(errMsg(e.message), true); }
+    });
+    $('#del', body).addEventListener('click', function () { m.close(); deleteConfirm(p); });
+  }
+
+  function deleteConfirm(p) {
+    const body = el('<div style="display:flex;flex-direction:column;gap:14px"><div style="font-size:14px;line-height:1.7">確定要刪除這張照片嗎？<br>' +
+      '<span style="font-size:12px;color:var(--muted)">日期 <span class="num">' + esc(fmtDate(p.date)) + '</span>・' + esc(p.location) + '・' + esc(p.source) + '</span></div>' +
+      '<ul style="margin:0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.8"><li>Google Sheet 中這張照片的紀錄會被刪除（內容備份到「異動紀錄」）</li><li>Drive 照片移到垃圾桶，30 天內可從 Drive 還原檔案</li>' +
+      (p.inIndex ? '<li>立即從比對索引移除</li>' : '') + '</ul>' +
+      '<div style="display:flex;gap:12px;justify-content:flex-end"><button class="btn btn-ghost" id="dcancel">取消</button><button class="btn btn-coral" id="dok">刪除</button></div></div>');
+    const m = openModal('刪除照片', body, { small: true });
+    $('#dcancel', body).addEventListener('click', function () { m.close(); });
+    $('#dok', body).addEventListener('click', async function () {
+      const btn = $('#dok', body); btn.disabled = true; btn.textContent = '刪除中…';
+      try {
+        const r = await api('admin_delete_photo', { fileId: p.fileId });
+        toast(p.inIndex && !r.indexRemoved ? '已刪除；索引移除失敗，請按「更新比對資料」' : '已刪除照片');
+        m.close(); openIndividual(current.id); loadList();
+      } catch (e) { toast(errMsg(e.message), true); btn.disabled = false; btn.textContent = '刪除'; }
     });
   }
 
