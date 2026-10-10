@@ -505,6 +505,8 @@ function handleAdmin_(action, body, user) {
       case 'admin_individual_photos': return ok_(getIndividualPhotosAdmin_(body.individualId));
       case 'admin_set_index': return setIndexFlag_(body, user);
       case 'admin_delete_photo': return deletePhotoAdmin_(body, user);
+      case 'admin_sheet_sync_preview': return ok_(sheetSyncPreview_());
+      case 'admin_sheet_sync_apply': return sheetSyncApply_(body, user);
       case 'admin_update_individual': return updateIndividual_(body, user);
       case 'admin_add_photos': return addPhotosToIndividual_(body, user);
       case 'admin_index_sync': return ok_(startIndexSync_(user));
@@ -1229,6 +1231,202 @@ function addPhotosToIndividual_(body, user) {
   const rows = readRecords_().rows.filter(function (r) { return r.groupId === groupId; });
   completeGroup_(sh, rows, id, body.includeIndex !== false, '', user.email);
   return ok_({ groupId: groupId, individual: id, added: rows.length });
+}
+
+// ====================== 依 Sheet 同步 ======================
+// Sheet 為準：只處理狀態＝完成的列。每次都比對「Sheet 內容」與「Drive 實際狀態」，不記錄歷史，
+// 因此中斷後重跑即可補完。物種以「個體清單」為準。索引差異交給 indexSyncStep。
+
+/** 掃描資料夾樹：fileId → { file, name, parentId, chain(相對 root 的資料夾名稱), tree } */
+function scanFolderTree_(rootId, tree, out) {
+  (function walk(folder, chain, depth) {
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const f = files.next();
+      out[f.getId()] = { file: f, name: f.getName(), parentId: folder.getId(), chain: chain, tree: tree };
+    }
+    if (depth >= 3) return;
+    const subs = folder.getFolders();
+    while (subs.hasNext()) { const sub = subs.next(); walk(sub, chain.concat([sub.getName()]), depth + 1); }
+  })(DriveApp.getFolderById(rootId), [], 0);
+}
+
+function buildSheetSyncPlan_() {
+  const rec = readRecords_();
+  const ind = readIndividuals_();
+  const dbRoot = folderId_('DATABASE'), reportsRoot = folderId_('REPORTS');
+  const files = {};
+  scanFolderTree_(dbRoot, 'db', files);
+  scanFolderTree_(reportsRoot, 'reports', files);
+
+  const referenced = {};
+  rec.rows.forEach(function (r) { if (r.fileId) referenced[r.fileId] = true; });
+
+  const items = [], errors = [], removes = [], creates = {};
+  rec.rows.forEach(function (r) {
+    if (r.status !== STATUS.DONE) return;
+    const label = { row: r.row, fileId: r.fileId, individual: r.individual, side: sideZh_(r.side), date: r.date };
+    const err = function (msg) { errors.push(Object.assign(label, { error: msg })); };
+    if (!r.fileId) return err('缺少 FileID');
+    const id = normalizeIndividualId_(r.individual);
+    if (!id) return err('編號格式錯誤或空白');
+    if (!r.side) return err('側別需為「左」或「右」');
+    if (!validDate_(r.date)) return err('目擊日期格式需為 yyyy-MM-dd');
+
+    let info = files[r.fileId];
+    if (!info) {
+      try {
+        const f = DriveApp.getFileById(r.fileId);
+        if (f.isTrashed()) throw new Error('trashed');
+        const ps = f.getParents();
+        info = { file: f, name: f.getName(), parentId: ps.hasNext() ? ps.next().getId() : '', chain: null, tree: 'other' };
+      } catch (e) { removes.push(label); return; }
+    }
+
+    const actions = [];
+    const indInfo = ind.map[id];
+    let species = indInfo && indInfo.species;
+    if (!indInfo) {
+      if (!creates[id]) creates[id] = { id: id, species: r.species };
+      species = creates[id].species;
+    }
+    if (species && r.species !== species) actions.push({ type: 'species', from: r.species, to: species });
+
+    const lr = sideLR_(r.side);
+    const inPlace = info.tree === 'db' && info.chain && info.chain.length === 2 && info.chain[0] === id && info.chain[1] === id + '_' + lr;
+    const nameOk = new RegExp('^' + id + '_' + lr + '_' + r.date.replace(/-/g, '') + '_\\d+\\.[a-z0-9]+$', 'i').test(info.name);
+    if (!inPlace) actions.push({ type: 'move', from: info.chain ? CONFIG.FOLDERS[info.tree === 'db' ? 'DATABASE' : 'REPORTS'] + '/' + info.chain.join('/') : '（其他位置）', to: CONFIG.FOLDERS.DATABASE + '/' + id + '/' + id + '_' + lr });
+    else if (!nameOk) actions.push({ type: 'rename', from: info.name });
+
+    const access = info.file.getSharingAccess();
+    if (r.isPublic && access !== DriveApp.Access.ANYONE_WITH_LINK) actions.push({ type: 'share', to: '公開' });
+    if (!r.isPublic && access !== DriveApp.Access.PRIVATE) actions.push({ type: 'share', to: '不公開' });
+
+    if (actions.length) items.push(Object.assign(label, { individual: id, lr: lr, actions: actions, _info: info, _r: r }));
+  });
+
+  const orphans = Object.keys(files).filter(function (fid) { return !referenced[fid]; }).map(function (fid) {
+    const f = files[fid];
+    return { fileId: fid, name: f.name, folder: CONFIG.FOLDERS[f.tree === 'db' ? 'DATABASE' : 'REPORTS'] + (f.chain.length ? '/' + f.chain.join('/') : ''), url: fileViewUrl_(fid) };
+  });
+
+  const createList = Object.keys(creates).map(function (k) { return creates[k]; });
+  const strip = function (it) { return { row: it.row, fileId: it.fileId, individual: it.individual, side: it.side, date: it.date, actions: it.actions }; };
+  const fingerprint = sha256Hex_(JSON.stringify({
+    items: items.map(strip), removes: removes.map(function (x) { return x.fileId; }), creates: createList
+  }));
+  return { items: items, errors: errors, removes: removes, creates: createList, orphans: orphans, fingerprint: fingerprint, strip: strip, roots: { db: dbRoot, reports: reportsRoot } };
+}
+
+function sheetSyncPreview_() {
+  const plan = buildSheetSyncPlan_();
+  const count = function (t) { return plan.items.filter(function (it) { return it.actions.some(function (a) { return a.type === t; }); }).length; };
+  return {
+    fingerprint: plan.fingerprint,
+    summary: {
+      move: count('move'), rename: count('rename'), share: count('share'), species: count('species'),
+      removes: plan.removes.length, creates: plan.creates.length, errors: plan.errors.length, orphans: plan.orphans.length
+    },
+    items: plan.items.slice(0, 300).map(plan.strip),
+    removes: plan.removes.slice(0, 300),
+    creates: plan.creates,
+    errors: plan.errors.slice(0, 300),
+    orphans: plan.orphans.slice(0, 300)
+  };
+}
+
+/** 資料夾內 {prefix}_YYYYMMDD_NN 的最大序號 */
+function maxSeqInFolder_(folder, prefix) {
+  const re = new RegExp('^' + prefix + '_\\d{8}_(\\d+)\\.', 'i');
+  let max = 0;
+  const it = folder.getFiles();
+  while (it.hasNext()) {
+    const m = it.next().getName().match(re);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max;
+}
+
+function sheetSyncApply_(body, user) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return fail_('busy');
+  const started = Date.now();
+  const TIME_LIMIT_MS = 4 * 60 * 1000;
+  try {
+    const plan = buildSheetSyncPlan_();
+    if (plan.fingerprint !== String(body.fingerprint || '')) return fail_('plan_changed');
+    const sh = getSheet_(CONFIG.SHEETS.RECORDS);
+    const audit = [];
+    const now = new Date();
+    const done = { move: 0, rename: 0, share: 0, species: 0, removes: 0, creates: 0, failed: 0 };
+
+    plan.creates.forEach(function (c) { ensureIndividual_(c.id, c.species, ''); done.creates++; audit.push([now, user.email, '', '同步：建立個體', '', c.id]); });
+
+    const folderCache = {}, seqCache = {};
+    const targetFolder = function (id, lr) {
+      const key = id + '_' + lr;
+      if (!folderCache[key]) {
+        const indFolder = getOrCreateChildFolder_(plan.roots.db, id);
+        folderCache[key] = getOrCreateChildFolder_(indFolder.getId(), key);
+        seqCache[key] = maxSeqInFolder_(folderCache[key], key);
+      }
+      return folderCache[key];
+    };
+
+    let processed = 0;
+    for (let i = 0; i < plan.items.length; i++) {
+      if (Date.now() - started > TIME_LIMIT_MS) break;
+      const it = plan.items[i], r = it._r, info = it._info;
+      try {
+        it.actions.forEach(function (a) {
+          if (a.type === 'species') {
+            sh.getRange(r.row, COL.SPECIES).setValue(a.to); done.species++;
+          } else if (a.type === 'move' || a.type === 'rename') {
+            const key = it.individual + '_' + it.lr;
+            const folder = targetFolder(it.individual, it.lr);
+            const ext = (info.name.match(/\.([a-z0-9]+)$/i) || [0, 'jpg'])[1].toLowerCase();
+            seqCache[key] += 1;
+            const newName = key + '_' + r.date.replace(/-/g, '') + '_' + String(seqCache[key]).padStart(2, '0') + '.' + ext;
+            if (a.type === 'move') info.file.moveTo(folder);
+            info.file.setName(newName);
+            sh.getRange(r.row, COL.PATH).setValue(CONFIG.FOLDERS.DATABASE + '/' + it.individual + '/' + key);
+            if (a.type === 'move' && info.parentId && info.tree !== 'other') cleanupEmptyAncestors_(info.parentId, plan.roots[info.tree]);
+            done[a.type]++;
+          } else if (a.type === 'share') {
+            setFilePublic_(r.fileId, r.isPublic); done.share++;
+          }
+        });
+        audit.push([now, user.email, r.groupId, '同步：' + it.actions.map(function (a) { return a.type; }).join('/'), info.name, 'row ' + r.row]);
+      } catch (err) {
+        logError_('sheetSync ' + r.fileId, err); done.failed++;
+        audit.push([now, user.email, r.groupId, '同步失敗', r.fileId, String(err && err.message || err)]);
+      }
+      processed++;
+    }
+
+    // 照片已不存在的列：備份到異動紀錄後刪除。列號以 FileID 重新定位，由下往上刪。
+    if (Date.now() - started <= TIME_LIMIT_MS && plan.removes.length) {
+      const rec = readRecords_();
+      const targets = {};
+      plan.removes.forEach(function (x) { targets[x.fileId] = true; });
+      const rows = rec.rows.filter(function (r) { return targets[r.fileId] && r.status === STATUS.DONE; });
+      rows.sort(function (a, b) { return b.row - a.row; }).forEach(function (r) {
+        const backup = sh.getRange(r.row, 1, 1, LAST_COL).getValues()[0].map(function (v) { return v instanceof Date ? v.toISOString() : v; });
+        audit.push([now, user.email, r.groupId, '同步：刪除列（照片已不存在）', JSON.stringify(backup), '']);
+        sh.deleteRow(r.row);
+        done.removes++;
+      });
+    }
+
+    if (audit.length) {
+      const ash = getSheet_(CONFIG.SHEETS.AUDIT);
+      ash.getRange(ash.getLastRow() + 1, 1, audit.length, 6).setValues(audit.map(function (a) { return a.map(function (v) { return v instanceof Date ? v : String(v); }); }));
+    }
+    invalidatePublicCache_();
+    const remaining = plan.items.length - processed + (done.removes < plan.removes.length ? plan.removes.length - done.removes : 0);
+    startIndexSync_(user);
+    return ok_({ done: done, remaining: remaining });
+  } finally { lock.releaseLock(); }
 }
 
 // ====================== 公開總覽 ======================

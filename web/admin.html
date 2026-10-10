@@ -13,7 +13,10 @@
   <main class="content">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
       <div style="font-size:24px;font-weight:900;color:var(--navy)">儀表板</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" id="sheetSyncBtn" style="min-height:42px">依 Sheet 同步</button>
       <a class="btn btn-ghost btn-sm" id="sheetLink" target="_blank" rel="noopener" style="min-height:42px">前往資料庫（Google Sheet）<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2B5CA8" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6 H 18 V 16"></path><path d="M18 6 L 7 17"></path></svg></a>
+      </div>
     </div>
     <div class="stat-grid" id="stats">
       <div class="paper stat"><div class="k">使用者數量</div><div class="v num" id="sUsers">-</div><div class="d">曾登入回報的 Google 帳號數</div></div>

@@ -37,6 +37,48 @@
     catch (e) { toast(errMsg(e.message), true); }
   });
 
+  // ---------- 依 Sheet 同步：先預覽差異，確認後套用 ----------
+  const SYNC_LABEL = { move: '搬移＋改名', rename: '改名', share: '改分享權限', species: '物種改為個體清單值' };
+  $('#sheetSyncBtn').addEventListener('click', function () { sheetSyncPreview(); });
+  async function sheetSyncPreview() {
+    const body = el('<div style="display:flex;flex-direction:column;gap:14px;font-size:13px"><div class="empty" style="padding:24px"><span class="spinner dark"></span> 正在比對 Sheet 與 Drive…</div></div>');
+    const m = openModal('依 Sheet 同步（預覽）', body);
+    let p;
+    try { p = await api('admin_sheet_sync_preview'); }
+    catch (e) { body.innerHTML = '<div class="empty">' + esc(errMsg(e.message)) + '</div>'; return; }
+    const s = p.summary;
+    const changes = p.items.length + s.removes + s.creates;
+    const stat = function (k, v, warn) { return '<div class="paper" style="padding:10px 14px;min-width:110px"><div style="font-size:11px;color:var(--muted)">' + k + '</div><div class="num" style="font-size:22px;font-weight:700;color:' + (warn && v ? 'var(--coral)' : 'var(--navy)') + '">' + v + '</div></div>'; };
+    const section = function (title, rows) { return rows ? '<div><div style="font-weight:700;color:var(--navy);margin-bottom:6px">' + title + '</div><div style="max-height:220px;overflow:auto;border:1px solid var(--blue5)">' + rows + '</div></div>' : ''; };
+    const line = function (html) { return '<div style="padding:6px 10px;border-bottom:1px solid var(--blue5)">' + html + '</div>'; };
+    const who = function (x) { return '第 <span class="num">' + x.row + '</span> 列・<span class="num">' + esc(x.individual || '—') + '</span>' + (x.side ? '・' + esc(x.side) : '') + (x.date ? '・<span class="num">' + esc(x.date) + '</span>' : ''); };
+    body.innerHTML =
+      '<div style="color:var(--muted);line-height:1.7">只處理狀態為「完成」的列；物種以「個體清單」為準。套用後會自動開始「更新比對資料」，同步「納入比對索引」與編號／側別／物種的變更。</div>' +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap">' + stat('搬移＋改名', s.move) + stat('改名', s.rename) + stat('改分享權限', s.share) + stat('修正物種', s.species) + stat('新建個體', s.creates) + stat('刪除列（照片不存在）', s.removes, true) + stat('錯誤（跳過）', s.errors, true) + stat('Drive 多出的照片', s.orphans, true) + '</div>' +
+      section('將修正的照片', p.items.map(function (x) { return line(who(x) + '：' + x.actions.map(function (a) { return esc(SYNC_LABEL[a.type] + (a.to ? '→' + a.to : '')); }).join('、')); }).join('')) +
+      section('新建個體', p.creates.map(function (c) { return line('<span class="num">' + esc(c.id) + '</span>・' + esc(c.species || '物種未填')); }).join('')) +
+      section('將刪除的列（Drive 已找不到照片，內容會備份到「異動紀錄」）', p.removes.map(function (x) { return line(who(x)); }).join('')) +
+      section('錯誤（這些列不會處理，請到 Sheet 修正）', p.errors.map(function (x) { return line(who(x) + '：<span style="color:var(--coral)">' + esc(x.error) + '</span>'); }).join('')) +
+      section('Drive 有照片但 Sheet 沒有紀錄（僅列出，不處理）', p.orphans.map(function (o) { return line(esc(o.folder) + '/<a href="' + esc(o.url) + '" target="_blank" rel="noopener">' + esc(o.name) + '</a>'); }).join('')) +
+      (changes ? '' : '<div class="empty" style="padding:16px">Sheet 與 Drive 一致，沒有需要修正的項目</div>') +
+      '<div style="display:flex;gap:12px;justify-content:flex-end"><button class="btn btn-ghost" id="scancel">取消</button>' + (changes ? '<button class="btn btn-orange" id="sok">確認套用</button>' : '') + '</div>';
+    $('#scancel', body).addEventListener('click', function () { m.close(); });
+    if (!changes) return;
+    $('#sok', body).addEventListener('click', async function () {
+      const btn = $('#sok', body); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> 套用中…';
+      try {
+        const r = await api('admin_sheet_sync_apply', { fingerprint: p.fingerprint });
+        const d = r.done;
+        toast('同步完成：搬移 ' + d.move + '、改名 ' + d.rename + '、權限 ' + d.share + '、物種 ' + d.species + '、刪除列 ' + d.removes + (d.failed ? '、失敗 ' + d.failed : '') + (r.remaining ? '；尚有 ' + r.remaining + ' 項未完成，請再按一次同步' : ''), !!(d.failed || r.remaining));
+        m.close(); loadStats(); loadPending();
+      } catch (e) {
+        toast(errMsg(e.message), true);
+        if (e.message === 'plan_changed') { m.close(); sheetSyncPreview(); }
+        else { btn.disabled = false; btn.textContent = '確認套用'; }
+      }
+    });
+  }
+
   async function loadPending() {
     try { pending = await api('admin_pending_list'); renderPending(); }
     catch (e) { toast(errMsg(e.message), true); }
