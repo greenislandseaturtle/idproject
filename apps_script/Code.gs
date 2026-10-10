@@ -21,7 +21,7 @@ const CONFIG = {
   SHEET_ID: '1zImpsCTjM8ky7CP2ZdzQJC3YapLh51nVefz1Q68Q7Yw',
   DRIVE_ROOT_ID: '1wOLoiKDGSn8siFsA_y5WrHLm9dg_a37y',
   CLOUD_RUN_URL: 'https://turtle-api-841875653967.asia-east1.run.app',
-  RESEARCHER_EMAILS: ['greenislandseaturtle@tourlearning089.com'],
+  RESEARCHER_EMAILS: ['greenislandseaturtle@tourlearning089.com'],  // 備援；實際名單在指令碼屬性 RESEARCHER_EMAILS
   MAX_FILE_SIZE_MB: 10,
   ALLOWED_MIME_TYPES: ['image/jpeg', 'image/png', 'image/heic', 'image/heif'],
   MAX_PHOTOS_PER_UPLOAD: 12,
@@ -115,9 +115,16 @@ function randomToken_(n) {
   for (let i = 0; i < n; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
   return s;
 }
+/** 研究員名單：指令碼屬性 RESEARCHER_EMAILS（逗號或換行分隔）；未設定時用 CONFIG 預設名單，避免全部被鎖在外。 */
+function researcherEmails_() {
+  const raw = getProp_('RESEARCHER_EMAILS');
+  const list = raw ? raw.split(/[,\n;]/) : CONFIG.RESEARCHER_EMAILS;
+  return list.map(function (e) { return String(e).trim().toLowerCase(); })
+    .filter(function (e) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e); });
+}
 function isResearcher_(email) {
-  return CONFIG.RESEARCHER_EMAILS.map(function (e) { return e.toLowerCase(); })
-    .indexOf(String(email || '').toLowerCase()) !== -1;
+  const e = String(email || '').trim().toLowerCase();
+  return !!e && researcherEmails_().indexOf(e) !== -1;
 }
 /** 側別統一：sheet 存「左/右」，API 用 left/right。 */
 function sideNorm_(v) {
